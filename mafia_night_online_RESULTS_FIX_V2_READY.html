@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Mafia Night Online</title>
+<style>
+:root{--bg:#07070b;--card:#11111a;--card2:#191924;--line:#2b2b3a;--purple:#7648ff;--red:#d6284a;--gold:#e9b94d;--text:#f7f7fb;--muted:#a5a5b5;--green:#35c98b}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 50% 0,#251331 0,#0b0a10 38%,#050507 100%);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif}.wrap{max-width:760px;margin:auto;padding:16px}.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}.logo{font-weight:950;letter-spacing:1px}.pill{padding:7px 11px;border:1px solid var(--line);border-radius:99px;background:#15151f;color:var(--muted);font-size:12px}.card{background:linear-gradient(145deg,#15151f,#0f0f17);border:1px solid var(--line);border-radius:25px;padding:22px;box-shadow:0 18px 70px #0009}.center{text-align:center}.hero{padding:28px 10px}.eyebrow{color:#cfc1ff;font-size:11px;letter-spacing:3px}.title{font-size:44px;line-height:.98;font-weight:950;margin:12px 0}.sub{color:var(--muted);line-height:1.75}.row{display:flex;gap:10px;flex-wrap:wrap}.grow{flex:1}input{width:100%;background:#0b0b12;border:1px solid #373747;color:#fff;border-radius:14px;padding:13px;font:inherit}button{border:0;border-radius:14px;padding:13px 16px;color:#fff;background:linear-gradient(135deg,#8359ff,#6336e8);font:inherit;font-weight:850;cursor:pointer}button.secondary{background:#292936}button.red{background:linear-gradient(135deg,#e52e50,#a71435)}button.green{background:linear-gradient(135deg,#29b77c,#1c8b60)}button.gold{background:linear-gradient(135deg,#c99736,#8f661d)}button:disabled{opacity:.4;cursor:not-allowed}.section{margin-top:16px}.players{display:grid;gap:8px;margin:12px 0}.player{display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--card2);border:1px solid var(--line);border-radius:14px}.pname{flex:1}.dead{text-decoration:line-through;color:#e46a7d}.badge{font-size:11px;padding:5px 8px;border-radius:99px;background:#242433;color:#bbb}.alive{color:#63d9a5}.notice{padding:14px;border-radius:15px;background:#1b1826;border:1px solid #3b3150;line-height:1.7;margin:12px 0}.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.choice{min-height:62px;background:#1a1a26;border:1px solid #363646;text-align:right}.phase{display:inline-block;padding:7px 12px;border-radius:99px;background:#251b3d;color:#dacfff}.icon{font-size:58px}.rolebox{padding:24px;margin:16px 0;border-radius:21px;border:1px solid #3e315e;background:radial-gradient(circle at 50% 0,#2c1d4d,#13131c 65%)}.role{font-size:40px;font-weight:950}.big{font-size:30px;font-weight:950;margin:10px 0}.muted{color:var(--muted)}.small{font-size:12px}.code{font-size:34px;font-weight:950;letter-spacing:7px;background:#0b0b12;border:1px dashed #5a4c88;padding:14px;border-radius:18px;margin:14px 0}.chat{height:260px;overflow:auto;background:#0b0b12;border:1px solid var(--line);border-radius:16px;padding:10px}.msg{padding:8px 10px;margin:7px 0;background:#171722;border-radius:12px}.msg b{color:#cfc1ff}.wait{padding:24px;text-align:center;color:var(--muted)}.winner{font-size:38px;font-weight:950;color:var(--gold);margin:18px 0}.spacer{height:10px}@media(max-width:500px){.title{font-size:36px}.grid{grid-template-columns:1fr}.card{padding:18px}.code{font-size:28px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top"><div class="logo">🎭 MAFIA NIGHT</div><div class="row" style="align-items:center"><div id="status" class="pill">اتصال...</div><div id="settingsBtn"></div></div></div>
+  <div id="app"></div>
+  <div class="small muted center" style="padding:15px">لعبة أونلاين — كل لاعب من جهازه</div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+"use strict";
+const SUPABASE_URL="https://iumrbyjzhyymcpafqxri.supabase.co";
+const SUPABASE_KEY="sb_publishable_-cZKcsv6UmMC5yspZdsNbA_vF_tCE-X";
+const {createClient}=window.supabase;
+const db=createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
+const app=document.getElementById("app"),statusEl=document.getElementById("status");
+const ROLES={mafia:{emoji:"🔪",name:"مافيا",desc:"أنت من المافيا. اتفقوا سراً واختروا ضحية."},doctor:{emoji:"🩺",name:"دكتور",desc:"احمِ لاعباً واحداً الليلة. لا يمكنك حماية نفس الشخص جولتين متتاليتين."},detective:{emoji:"🔎",name:"محقق",desc:"افحص لاعباً لمعرفة هل هو من المافيا."},citizen:{emoji:"👤",name:"مواطن",desc:"أنت مواطن. في الليل لا تحتاج لفعل شيء."}};
+let S={user:null,room:null,players:[],me:null,role:null,mafiaMembers:[],screen:"home",nightDone:false,dayVoted:false,resolving:false,chat:[],lastPhase:"",poll:null,settingsOpen:false,lastNightActionKey:null,lastDayVoteKey:null,mafiaCount:1,submittingNight:false,submittingDay:false,chatEditing:false,investigationPending:false,investigationData:null};
+function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
+function setStatus(s){statusEl.textContent=s}
+function errText(e){return e?.message||"حدث خطأ غير معروف"}
+async function ensureAuth(){let {data:{session}}=await db.auth.getSession();if(session){S.user=session.user;return}let {data,error}=await db.auth.signInAnonymously();if(error)throw error;S.user=data.user}
+function roomId(){return S.room?.id}
+async function loadRoom(){if(!roomId())return;let {data:r,error}=await db.from("rooms").select("id,code,host_id,phase,round,winner,mafia_count,game_version,last_event_name,last_event_role,last_event_kind").eq("id",roomId()).single();if(error)throw error;S.room=r;
+  if(!S.room.winner && r.phase==='ended'){ S.room.winner = null; }
+  if(r.mafia_count===1||r.mafia_count===2)S.mafiaCount=r.mafia_count;
+  let {data:p,error:e}=await db.from("players").select("id,user_id,name,alive,joined_at").eq("room_id",r.id).order("joined_at");if(e)throw e;S.players=p;S.me=p.find(x=>x.user_id===S.user.id)||null;if(!S.me){leaveLocal();return}if(!S.role&&r.phase!=="lobby"){await loadRole()}if(S.role==="mafia"&&r.phase!=="lobby")await loadMafiaMembers();}
+async function loadRole(){let {data,error}=await db.rpc("get_my_mafia_role",{p_room_id:roomId()});if(error)throw error;S.role=data?.role||null}
+async function loadMafiaMembers(){let {data,error}=await db.rpc("get_mafia_members",{p_room_id:roomId()});if(!error)S.mafiaMembers=data||[]}
+async function createRoom(name){let {data,error}=await db.rpc("create_mafia_room",{p_name:name});if(error)throw error;S.room={id:data.room_id,code:data.code,host_id:S.user.id,phase:"lobby",round:0};localStorage.setItem("mafia_room",S.room.id);await loadRoom();render()}
+async function joinRoom(code,name){let {data,error}=await db.rpc("join_mafia_room",{p_code:code,p_name:name});if(error)throw error;S.room={id:data.room_id,code:data.code,phase:"lobby",round:0};localStorage.setItem("mafia_room",S.room.id);await loadRoom();render()}
+function leaveLocal(){localStorage.removeItem("mafia_room");S.room=null;S.players=[];S.me=null;S.role=null;S.screen="home";render()}
+async function startGame(){
+  if(!S.room||S.room.host_id!==S.user.id)return;
+  try{
+    const sel=document.getElementById("mafiaCount");
+    const count=sel?Number(sel.value):Number(S.mafiaCount||1);
+    S.mafiaCount=count;
+    let {error}=await db.rpc("start_mafia_game_with_count",{p_room_id:roomId(),p_mafia_count:count});
+    if(error)throw error;
+    await loadRoom();
+    S.role=null;S.mafiaMembers=[];S.nightDone=false;S.dayVoted=false;
+    await loadRole();
+    if(S.role==="mafia")await loadMafiaMembers();
+    render();
+  }catch(e){alert(errText(e))}
+}
+async function startVoting(){try{let {error}=await db.rpc("start_day_voting",{p_room_id:roomId()});if(error)throw error;await loadRoom();render()}catch(e){alert(errText(e))}}
+async function submitNight(type,target){if(S.nightDone||S.submittingNight)return;S.submittingNight=true;try{let {data,error}=await db.rpc("submit_night_action",{p_room_id:roomId(),p_action_type:type,p_target_id:target});if(error)throw error;S.nightDone=true;if(type==="detective_check")showInvestigation(data);else{render();setTimeout(checkNightComplete,250)}}catch(e){alert(errText(e))}finally{S.submittingNight=false}}
+async function checkNightComplete(){if(!S.room||S.room.phase!=="night")return;let {data,error}=await db.rpc("night_actions_complete",{p_room_id:roomId()});if(error)return;if(data&&!S.resolving){S.resolving=true;let r=await db.rpc("resolve_night",{p_room_id:roomId()});S.resolving=false;if(r.error&&!/المرحلة الحالية ليست الليل|لم ينته/.test(r.error.message))console.warn(r.error);await loadRoom();S.nightDone=false;render()}}
+async function submitDay(target){if(S.dayVoted||S.submittingDay)return;S.submittingDay=true;try{let {error}=await db.rpc("submit_day_vote",{p_room_id:roomId(),p_target_id:target??null});if(error)throw error;S.dayVoted=true;render();setTimeout(checkDayComplete,250)}catch(e){alert(errText(e))}finally{S.submittingDay=false}}
+async function checkDayComplete(){if(!S.room||S.room.phase!=="voting")return;let {data,error}=await db.rpc("day_votes_complete",{p_room_id:roomId()});if(error)return;if(data&&!S.resolving){S.resolving=true;let r=await db.rpc("resolve_day_vote",{p_room_id:roomId()});S.resolving=false;if(r.error&&!/التصويت غير مفتوح|لم يصوت/.test(r.error.message))console.warn(r.error);await loadRoom();S.dayVoted=false;render()}}
+async function sendChat(){
+  const inp=document.getElementById("chatInput");
+  if(!inp||!inp.value.trim())return;
+  const msg=inp.value.trim();
+  S.chatEditing=true;
+  try{
+    let {error}=await db.rpc("send_mafia_message",{p_room_id:roomId(),p_message:msg});
+    if(error)throw error;
+    inp.value="";
+    await loadChat();
+    patchChat();
+    requestAnimationFrame(()=>{
+      const el=document.getElementById("chatInput");
+      if(el){el.focus();S.chatEditing=true}
+    });
+  }catch(e){alert(errText(e))}
+}
+async function loadChat(){if(S.role!=="mafia")return;let {data,error}=await db.from("mafia_messages").select("id,sender_id,message,created_at").eq("room_id",roomId()).order("created_at");if(!error)S.chat=data||[]}
+function patchChat(){const box=document.getElementById("chatBox");if(!box)return;box.innerHTML=S.chat.length?S.chat.map(m=>{const p=S.players.find(x=>x.id===m.sender_id);return `<div class="msg"><b>${esc(p?.name||'مافيا')}:</b> ${esc(m.message)}</div>`}).join(""):'<div class="wait">لا توجد رسائل بعد.</div>';box.scrollTop=box.scrollHeight}
+function isHost(){return S.room&&S.room.host_id===S.user.id}
+async function setMafiaCount(n){
+  if(!isHost())return;
+  const next=(n===2?2:1);
+  S.mafiaCount=next;
+  render();
+  try{
+    const {error}=await db.rpc("set_mafia_count",{p_room_id:roomId(),p_mafia_count:next});
+    if(error)throw error;
+  }catch(e){
+    alert(errText(e));
+    await loadRoom();
+    render();
+  }
+}
+
+function actionKey(){return S.room?`${S.room.id}:${S.room.round}:${S.role||"none"}`:""}
+function voteKey(){return S.room?`${S.room.id}:${S.room.round}:vote`:""}
+async function restoreMyActionState(){
+  if(!S.room||!S.me)return;
+  if(S.room.phase==="night"&&S.role&&S.role!=="citizen"){
+    const {data,error}=await db.from("night_actions").select("id").eq("room_id",roomId()).eq("round",S.room.round).eq("actor_id",S.me.id).limit(1);
+    if(!error)S.nightDone=(data||[]).length>0;
+  }
+  if(S.room.phase==="voting"&&S.me.alive){
+    const {data,error}=await db.from("day_votes").select("id").eq("room_id",roomId()).eq("round",S.room.round).eq("voter_id",S.me.id).limit(1);
+    if(!error)S.dayVoted=(data||[]).length>0;
+  }
+}
+function settingsButton(){return S.room?`<button class="secondary" style="padding:8px 11px" onclick="toggleSettings()">⚙️</button>`:""}
+function toggleSettings(){S.settingsOpen=!S.settingsOpen;render()}
+function settingsPanel(){
+  if(!S.settingsOpen||!S.room)return"";
+  return `<div class="card" style="margin-bottom:12px">
+    <div class="row" style="align-items:center"><div class="grow"><h3 style="margin:0">⚙️ الإعدادات</h3></div><button class="secondary" onclick="toggleSettings()">إغلاق</button></div>
+    <div class="notice small">اسمك: <b>${esc(S.me?.name||"")}</b><br>كود الغرفة: <b>${esc(S.room.code||"")}</b></div>
+    ${isHost()?`
+    <div class="notice">
+      <b>🔪 عدد المافيا بالجولة الجديدة</b>
+      <div class="row" style="margin-top:8px">
+        <button class="${S.mafiaCount===1?'green':'secondary'} grow" onclick="setMafiaCount(1)">1 مافيا</button>
+        <button class="${S.mafiaCount===2?'green':'secondary'} grow" onclick="setMafiaCount(2)">2 مافيا</button>
+      </div>
+    </div>
+    <button class="red" style="width:100%" onclick="confirmRestart()">🔄 إعادة اللعبة</button>
+    <div class="small muted" style="margin-top:8px">يعيد الجولة من البداية، يبقي نفس الغرفة والكود واللاعبين الموجودين، ويعيد توزيع الأدوار حسب العدد المختار.</div>
+  `:""}
+    <div class="spacer"></div><button class="secondary" style="width:100%" onclick="leaveLocal()">🚪 مغادرة الغرفة</button>
+  </div>`;
+}
+function confirmRestart(){
+  if(!isHost())return;
+  if(confirm("هل تريد إعادة اللعبة؟ سيتم إنهاء الجولة الحالية وإعادة توزيع الأدوار على اللاعبين الموجودين مع بقاء نفس كود الغرفة.")) restartGame();
+}
+async function restartGame(){
+  if(!isHost())return;
+  try{
+    const {error}=await db.rpc("restart_mafia_game",{p_room_id:roomId(),p_mafia_count:Number(S.mafiaCount||1)});
+    if(error)throw error;
+    S.role=null;S.mafiaMembers=[];S.nightDone=false;S.dayVoted=false;S.resolving=false;S.chat=[];S.investigationPending=false;S.investigationData=null;S.settingsOpen=false;
+    await loadRoom();await loadRole();if(S.role==="mafia")await loadMafiaMembers();render();
+  }catch(e){alert(errText(e))}
+}
+
+function homeUI(){setStatus("جاهز");app.innerHTML=`<div class="card"><div class="hero center"><div class="eyebrow">THE SOCIAL DEDUCTION GAME</div><div class="title">MAFIA<br>NIGHT</div><p class="sub">كل لاعب يدخل من جواله، يختار اسمه، وتتم مزامنة اللعبة بين الجميع لحظياً.</p></div><div class="section"><h3>إنشاء غرفة</h3><div class="row"><div class="grow"><input id="createName" maxlength="20" placeholder="اسمك"></div><button onclick="doCreate()">إنشاء غرفة</button></div></div><div class="section"><h3>الانضمام إلى غرفة</h3><div class="row"><div class="grow"><input id="joinCode" maxlength="6" placeholder="كود الغرفة"></div><div class="grow"><input id="joinName" maxlength="20" placeholder="اسمك"></div><button onclick="doJoin()">انضمام</button></div></div><div id="homeMsg" class="notice small">المضيف ينشئ الغرفة ويرسل الكود للشباب. كل لاعب يختار اسمه بنفسه.</div></div>`}
+async function doCreate(){try{const n=document.getElementById("createName").value.trim();if(!n)return alert("اكتب اسمك");await createRoom(n)}catch(e){alert(errText(e))}}
+async function doJoin(){try{const c=document.getElementById("joinCode").value.trim(),n=document.getElementById("joinName").value.trim();if(!c||!n)return alert("اكتب الكود والاسم");await joinRoom(c,n)}catch(e){alert(errText(e))}}
+function lobbyUI(){
+  setStatus("اللوبي");
+  const host=isHost();
+  app.innerHTML=`<div class="card"><div class="center"><span class="phase">👥 انتظار اللاعبين</span><div class="code">${esc(S.room.code)}</div><p class="muted">أرسل هذا الكود للشباب حتى يدخلون من جوالاتهم.</p></div>
+  <div class="players">${S.players.map((p,i)=>`<div class="player"><span>${i+1}</span><span class="pname">${esc(p.name)}</span>${p.user_id===S.room.host_id?'<span class="badge">👑 المضيف</span>':''}</div>`).join("")}</div>
+  <div class="notice small">عدد اللاعبين: <b>${S.players.length}</b> — الحد الأدنى 5 لاعبين.</div>
+  ${host?`
+    <div class="notice">
+      <b>🔪 عدد المافيا</b>
+      <div class="row" style="margin-top:8px">
+        <button id="maf1" class="${S.mafiaCount===1?'green':'secondary'} grow" onclick="setMafiaCount(1)">1 مافيا</button>
+        <button id="maf2" class="${S.mafiaCount===2?'green':'secondary'} grow" onclick="setMafiaCount(2)">2 مافيا</button>
+      </div>
+      <div class="small muted" style="margin-top:8px">المضيف فقط يختار العدد قبل بدء اللعبة.</div>
+    </div>
+    <button class="green" style="width:100%" onclick="startGame()" ${S.players.length<5?'disabled':''}>🎭 ابدأ اللعبة</button>
+  `:`<div class="wait">أنت لاعب. انتظر المضيف يبدأ اللعبة...</div>`}
+  <div class="spacer"></div><button class="secondary" style="width:100%" onclick="leaveLocal()">خروج من الغرفة</button></div>`;
+}
+function waitingNextGameUI(){setStatus("⏳ انتظار الجولة الجديدة");app.innerHTML=`<div class="card center"><div class="icon">⏳</div><h2>دخلت الغرفة</h2><p class="sub">اللعبة الحالية بدأت بالفعل. انتظر المضيف يسوي «إعادة اللعبة» حتى تدخل مع الجميع في الجولة الجديدة.</p><div class="notice">كود الغرفة: <b>${esc(S.room.code)}</b></div></div>`}
+function roleUI(){setStatus("دورك السري");const info=ROLES[S.role]||ROLES.citizen;app.innerHTML=`<div class="card center"><span class="phase">🔒 دورك السري</span><div class="rolebox"><div class="icon">${info.emoji}</div><div class="role">${info.name}</div><p>${info.desc}</p>${S.role==='mafia'?`<div class="notice"><b>المافيا معك:</b><br>${S.mafiaMembers.map(x=>esc(x.name)).join(" • ")}</div>`:""}</div><p class="muted">هذا الدور يظهر لك أنت فقط على جهازك.</p><button style="width:100%" onclick="enterGame()">فهمت • ادخل اللعبة</button></div>`}
+function enterGame(){renderGame()}
+function playersHTML(filter=i=>true){return S.players.filter(filter).map(p=>`<div class="player"><span class="pname ${p.alive?'':'dead'}">${esc(p.name)}</span><span class="badge">${p.alive?'حي':'ميت'}</span></div>`).join("")}
+function nightUI(){setStatus("🌙 الليل");const alive=S.players.filter(p=>p.alive);if(S.nightDone){app.innerHTML=`<div class="card center"><div class="icon">🌙</div><span class="phase">الليل — تم</span><h2>تم تنفيذ دورك</h2><p class="sub">انتظر بقية اللاعبين. النظام سينتقل للنهار تلقائياً عندما تنتهي أدوار الليل.</p>${S.role==='mafia'?chatHTML():''}</div>`;return}
+let body="";if(S.role==='citizen')body=`<div class="rolebox center"><div class="icon">😴</div><div class="role">مواطن</div><p>الليلة دورك النوم. لا تحتاج تسوي أي شيء.</p><div class="wait">انتظر بقية أصحاب الأدوار...</div></div>`;
+if(S.role==='mafia'){const opts=alive.filter(p=>!S.mafiaMembers.some(m=>m.id===p.id));body=`<div class="rolebox"><div class="icon">🔪</div><div class="role">مافيا</div><p>اتفقوا سراً في الشات، ثم اختروا ضحية.</p>${chatHTML()}<h3>اختيار الضحية</h3><div class="grid">${opts.map(p=>`<button class="choice" onclick="submitNight('mafia_vote','${p.id}')">${esc(p.name)}</button>`).join("")}</div></div>`}
+if(S.role==='doctor')body=`<div class="rolebox"><div class="icon">🩺</div><div class="role">دكتور</div><p>اختر من تحميه. النظام يمنعك من تكرار نفس الشخص في جولتين متتاليتين.</p><div class="grid">${alive.map(p=>`<button class="choice" onclick="submitNight('doctor_protect','${p.id}')">${esc(p.name)}${p.id===S.me.id?' (أنا)':''}</button>`).join("")}</div></div>`;
+if(S.role==='detective')body=`<div class="rolebox"><div class="icon">🔎</div><div class="role">محقق</div><p>اختر لاعباً للتحقيق معه. النتيجة ستظهر لك وحدك.</p><div class="grid">${alive.filter(p=>p.id!==S.me.id).map(p=>`<button class="choice" onclick="submitNight('detective_check','${p.id}')">${esc(p.name)}</button>`).join("")}</div></div>`;
+app.innerHTML=`<div class="card"><div class="center"><span class="phase">🌙 الجولة ${S.room.round}</span><p class="muted">الهاتف ليس مشتركاً — أنت تلعب من جهازك.</p></div>${body}</div>`;}
+function chatHTML(){if(S.role!=="mafia")return"";return `<div class="notice"><b>💬 شات المافيا السري</b><div class="chat" id="chatBox">${S.chat.length?S.chat.map(m=>{const p=S.players.find(x=>x.id===m.sender_id);return `<div class="msg"><b>${esc(p?.name||'مافيا')}:</b> ${esc(m.message)}</div>`}).join(""):'<div class="wait">لا توجد رسائل بعد.</div>'}</div><div class="row" style="margin-top:8px"><div class="grow"><input id="chatInput" maxlength="500" placeholder="اكتب للمافيا..." onfocus="S.chatEditing=true" onblur="setTimeout(()=>{S.chatEditing=false},300)"></div><button onclick="sendChat()">إرسال</button></div></div>`}
+function showInvestigation(data){
+  S.nightDone=true;
+  S.investigationPending=true;
+  S.investigationData=data||{};
+  renderInvestigationResult();
+}
+function renderInvestigationResult(){
+  const mafia=S.investigationData?.result==="mafia";
+  app.innerHTML=`<div class="card center">
+    <div class="icon">🔎</div>
+    <h2>نتيجة التحقيق</h2>
+    <div class="rolebox">
+      <div class="big" style="${mafia?'color:#ff4d67':'color:#fff'}">${mafia?'💀 مافيا':'❌ ليس مافيا'}</div>
+      <p class="muted">النتيجة سرية وتظهر لك وحدك.</p>
+    </div>
+    <button style="width:100%" onclick="closeInvestigation()">إخفاء النتيجة • التالي</button>
+  </div>`;
+}
+function closeInvestigation(){
+  S.investigationPending=false;
+  S.investigationData=null;
+  render();
+}
+function dayUI(){setStatus("☀️ النهار");const dead=S.players.filter(p=>!p.alive);app.innerHTML=`<div class="card"><div class="center"><span class="phase">☀️ الجولة ${S.room.round}</span><div class="icon">☀️</div><h2>وقت النقاش</h2><p class="sub">النقاش مفتوح بدون مؤقت. تكلموا براحتكم، ولما تقررون التصويت اضغطوا الزر.</p></div>${dead.length?`<div class="notice">💀 خارج اللعبة: ${dead.map(p=>esc(p.name)).join(" • ")}</div>`:''}${isHost()?`<button class="green" style="width:100%" onclick="startVoting()">🗳️ انتهى النقاش • ابدأ التصويت</button>`:`<div class="wait">انتظر المضيف يبدأ التصويت...</div>`}</div>`}
+function votingUI(){setStatus("🗳️ التصويت");if(S.dayVoted){app.innerHTML=`<div class="card center"><div class="icon">🗳️</div><h2>تم تسجيل تصويتك</h2><p class="sub">انتظر بقية اللاعبين. عند اكتمال التصويت سيقرر النظام النتيجة.</p></div>`;return}if(!S.me.alive){app.innerHTML=`<div class="card center"><div class="icon">💀</div><h2>أنت خارج اللعبة</h2><p class="sub">لا يمكنك التصويت. انتظر نتيجة التصويت.</p></div>`;return}const opts=S.players.filter(p=>p.alive&&p.id!==S.me.id);app.innerHTML=`<div class="card"><div class="center"><span class="phase">🗳️ اختر لاعباً</span><h2>من تريد إخراجه؟</h2><p class="muted">آخر خيار هو SKIP إذا ما تريدون إخراج أحد.</p></div><div class="grid">${opts.map(p=>`<button class="choice" onclick="submitDay('${p.id}')">👤 ${esc(p.name)}</button>`).join("")}</div><div style="margin-top:12px"><button class="gold" style="width:100%" onclick="submitDay(null)">🙈 SKIP — لا نخرج أحد</button></div></div>`}
+
+function roleLabel(role){
+  if(role==="mafia")return "🔪 مافيا";
+  if(role==="doctor")return "🩺 دكتور";
+  if(role==="detective")return "🔎 محقق";
+  return "👤 مواطن";
+}
+function nightResultUI(){
+  setStatus("🌅 نتيجة الليل");
+  const kind=S.room.last_event_kind;
+  let body="";
+  if(kind==="night_kill"){
+    body=`<div class="rolebox center"><div class="icon">☠️</div><h2>ضحية الليلة</h2><div class="big">${esc(S.room.last_event_name||"لاعب")}</div></div>`;
+  }else if(kind==="night_saved"){
+    body=`<div class="rolebox center"><div class="icon">🩺</div><h2>لم يُقتل أحد</h2><p>الدكتور أنقذ الضحية هذه الليلة.</p></div>`;
+  }else{
+    body=`<div class="rolebox center"><div class="icon">🌙</div><h2>لم يُقتل أحد</h2><p>انتهى الليل بدون ضحية.</p></div>`;
+  }
+  app.innerHTML=`<div class="card center">${body}${isHost()?`<button class="green" style="width:100%" onclick="continueAfterNight()">التالي • ابدأ النهار</button>`:`<div class="wait">انتظر المضيف يضغط التالي...</div>`}</div>`;
+}
+async function continueAfterNight(){
+  if(!isHost())return;
+  try{
+    const {error}=await db.rpc("continue_after_night_result",{p_room_id:roomId()});
+    if(error)throw error;
+    await loadRoom();render();
+  }catch(e){alert(errText(e))}
+}
+function voteResultUI(){
+  setStatus("🗳️ نتيجة التصويت");
+  const eliminated=S.room.last_event_kind==="vote_eliminated";
+  let body="";
+  if(eliminated){
+    body=`<div class="rolebox center"><div class="icon">🚪</div><h2>تم إقصاء</h2>
+      <div class="big">${esc(S.room.last_event_name||"لاعب")}</div>
+      <div class="notice">دوره كان: <b>${roleLabel(S.room.last_event_role)}</b></div>
+    </div>`;
+  }else{
+    body=`<div class="rolebox center"><div class="icon">🙈</div><h2>لم يتم إقصاء أحد</h2><p>التصويت انتهى بسكيب أو تعادل.</p></div>`;
+  }
+  app.innerHTML=`<div class="card center">${body}${isHost()?`<button class="green" style="width:100%" onclick="continueAfterVote()">التالي • ابدأ الليل</button>`:`<div class="wait">انتظر المضيف يضغط التالي...</div>`}</div>`;
+}
+async function continueAfterVote(){
+  if(!isHost())return;
+  try{
+    const {error}=await db.rpc("continue_after_vote_result",{p_room_id:roomId()});
+    if(error)throw error;
+    await loadRoom();render();
+  }catch(e){alert(errText(e))}
+}
+
+function endUI(){setStatus("🏆 النهاية");app.innerHTML=`<div class="card center"><div class="icon">🏆</div><h1>انتهت اللعبة</h1><div class="winner">${S.room.winner==="mafia"?"🔪 فازت المافيا":S.room.winner==="citizens"?"👥 فاز المواطنون":"اللعبة انتهت 🏁"}</div><p class="sub">${isHost()?"تقدر تعيد اللعبة من زر ⚙️ بالأعلى بنفس الغرفة واللاعبين.":"انتظر المضيف إذا يريد يعيد اللعبة."}</p></div>`}
+function renderGame(){if(!S.room)return homeUI();if(S.room.phase==='lobby')return lobbyUI();if(!S.role)return waitingNextGameUI();if(S.investigationPending)return renderInvestigationResult();if(S.room.phase==='night')return nightUI();if(S.room.phase==='night_result')return nightResultUI();if(S.room.phase==='day')return dayUI();if(S.room.phase==='voting')return votingUI();if(S.room.phase==='vote_result')return voteResultUI();if(S.room.phase==='ended')return endUI()}
+function render(){
+  const sb=document.getElementById("settingsBtn");if(sb)sb.innerHTML=settingsButton();
+  if(!S.room){S.settingsOpen=false;homeUI();return}
+  const original=app.innerHTML;
+  renderGame();
+  if(S.settingsOpen){app.innerHTML=settingsPanel()+app.innerHTML}
+}
+async function refresh(){try{
+  if(!S.room)return;
+  const oldPhase=S.room.phase,oldRound=S.room.round,oldVersion=S.room.game_version;
+  const editingChat=S.chatEditing || document.activeElement?.id==="chatInput";
+
+  await loadRoom();
+
+  const newGame=(oldVersion!==undefined&&S.room.game_version!==oldVersion);
+  const phaseChanged=(oldPhase!==S.room.phase||oldRound!==S.room.round);
+
+  if(newGame){
+    S.chatEditing=false;
+    S.role=null;S.mafiaMembers=[];S.nightDone=false;S.dayVoted=false;S.resolving=false;S.chat=[];
+    await loadRole();
+    if(S.role==="mafia")await loadMafiaMembers();
+  }else if(phaseChanged){
+    S.chatEditing=false;
+    S.nightDone=false;S.dayVoted=false;S.resolving=false;
+  }
+
+  await restoreMyActionState();
+
+  if(S.investigationPending){
+    renderInvestigationResult();
+    return;
+  }
+
+  if(S.role==='mafia'&&S.room.phase==='night'){
+    await loadChat();
+    patchChat();
+    if(editingChat&&!newGame&&!phaseChanged)return;
+  }
+
+  render();
+
+  if(S.room.phase==='night'&&!S.nightDone)setTimeout(checkNightComplete,100);
+  if(S.room.phase==='voting'&&!S.dayVoted)setTimeout(checkDayComplete,100);
+}catch(e){console.warn(e)}}
+async function boot(){try{await ensureAuth();setStatus("متصل");const saved=localStorage.getItem("mafia_room");if(saved){try{S.room={id:saved};await loadRoom();await restoreMyActionState();}catch(e){localStorage.removeItem("mafia_room");S.room=null}}render();S.poll=setInterval(refresh,1800)}catch(e){setStatus("خطأ");app.innerHTML=`<div class="card center"><div class="icon">⚠️</div><h2>تعذر الاتصال</h2><p class="sub">${esc(errText(e))}</p><button onclick="location.reload()">إعادة المحاولة</button></div>`}}
+boot();
+window.doCreate=doCreate;window.doJoin=doJoin;window.startGame=startGame;window.startVoting=startVoting;window.submitNight=submitNight;window.submitDay=submitDay;window.sendChat=sendChat;window.leaveLocal=leaveLocal;window.enterGame=enterGame;window.render=render;window.toggleSettings=toggleSettings;window.confirmRestart=confirmRestart;window.restartGame=restartGame;window.setMafiaCount=setMafiaCount;window.closeInvestigation=closeInvestigation;window.continueAfterNight=continueAfterNight;window.continueAfterVote=continueAfterVote;
+</script>
+</body>
+</html>
