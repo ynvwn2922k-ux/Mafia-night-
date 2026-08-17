@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Mafia Night</title>
+<style>
+:root{--bg:#07070b;--card:#11111a;--card2:#191924;--line:#2b2b3a;--purple:#7648ff;--red:#d6284a;--gold:#e9b94d;--text:#f7f7fb;--muted:#a5a5b5}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 50% 0,#251331 0,#0b0a10 38%,#050507 100%);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif}
+.wrap{max-width:720px;margin:auto;padding:16px}.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}.logo{font-weight:950;letter-spacing:1px}.pill{padding:7px 11px;border:1px solid var(--line);border-radius:99px;background:#15151f;color:var(--muted);font-size:12px}
+.card{background:linear-gradient(145deg,#15151f,#0f0f17);border:1px solid var(--line);border-radius:25px;padding:22px;box-shadow:0 18px 70px #0009}.center{text-align:center}.hero{padding:34px 10px}.eyebrow{color:#cfc1ff;font-size:11px;letter-spacing:3px}.title{font-size:44px;line-height:.98;font-weight:950;margin:12px 0}.sub{color:var(--muted);line-height:1.75}.row{display:flex;gap:10px;flex-wrap:wrap}.grow{flex:1}input,select{width:100%;background:#0b0b12;border:1px solid #373747;color:#fff;border-radius:14px;padding:13px;font:inherit}button{border:0;border-radius:14px;padding:13px 16px;color:#fff;background:linear-gradient(135deg,#8359ff,#6336e8);font:inherit;font-weight:850;cursor:pointer}button.secondary{background:#292936}button.red{background:linear-gradient(135deg,#e52e50,#a71435)}button:disabled{opacity:.4}.section{margin-top:16px}.players{display:grid;gap:8px;margin:12px 0}.player{display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--card2);border:1px solid var(--line);border-radius:14px}.num{color:#777789;width:25px}.pname{flex:1}.x{padding:7px 10px;background:#2a1520}.phase{display:inline-block;padding:7px 12px;border-radius:99px;background:#251b3d;color:#dacfff}.icon{font-size:58px}.rolebox{padding:24px;margin:16px 0;border-radius:21px;border:1px solid #3e315e;background:radial-gradient(circle at 50% 0,#2c1d4d,#13131c 65%)}.role{font-size:40px;font-weight:950}.notice{padding:14px;border-radius:15px;background:#1b1826;border:1px solid #3b3150;line-height:1.7;margin:12px 0}.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.choice{min-height:62px;background:#1a1a26;border:1px solid #363646;text-align:right}.timer{font-size:50px;font-weight:950;font-variant-numeric:tabular-nums;margin:8px}.bar{height:7px;background:#242430;border-radius:99px;overflow:hidden}.fill{height:100%;width:100%;background:linear-gradient(90deg,var(--purple),#c65cff);transition:width 1s linear}.big{font-size:30px;font-weight:950;margin:10px 0}.winner{font-size:38px;font-weight:950;color:var(--gold);margin:18px 0}.muted{color:var(--muted)}.small{font-size:12px}.dead{text-decoration:line-through;color:#e46a7d}
+@media(max-width:500px){.title{font-size:36px}.grid{grid-template-columns:1fr}.card{padding:18px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top"><div class="logo">🎭 MAFIA NIGHT</div><div id="status" class="pill">جاهز</div></div>
+  <div id="app"></div>
+  <div class="small muted center" style="padding:15px">لعبة محلية — جهاز واحد</div>
+</div>
+<script>
+"use strict";
+const app=document.getElementById("app"), statusEl=document.getElementById("status");
+const ROLES={
+ mafia:{emoji:"🔪",name:"مافيا",desc:"أنت من المافيا. اختر ضحية الليلة."},
+ doctor:{emoji:"🩺",name:"دكتور",desc:"اختر لاعباً لتحميه الليلة."},
+ detective:{emoji:"🔎",name:"محقق",desc:"افحص لاعباً لمعرفة هل هو من المافيا."},
+ citizen:{emoji:"👤",name:"مواطن",desc:"أنت مواطن. الليلة دورك النوم وعدم التدخل."}
+};
+let G={
+ screen:"home", players:[], roles:[], alive:[], roleIndex:0,
+ nightTurns:[], nightPos:0, night:{mafiaVotes:{},saved:null,checked:null},
+ phase:"", timer:0, interval:null, settings:{night:60,day:120}, winner:null
+};
+
+function esc(s){return s.replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
+function setStatus(s){statusEl.textContent=s}
+function stopTimer(){clearInterval(G.interval);G.interval=null}
+function fmt(s){return String(Math.floor(Math.max(0,s)/60)).padStart(2,"0")+":"+String(Math.max(0,s)%60).padStart(2,"0")}
+function startTimer(sec,kind){
+ stopTimer(); G.timer=sec; G.phase=kind;
+ G.interval=setInterval(()=>{G.timer--;updateTimer();if(G.timer<=0){stopTimer();if(G.phase==="night")autoNight();else autoDay()}},1000);
+}
+function updateTimer(){
+ const t=document.getElementById("tm"),f=document.getElementById("fill");
+ if(t)t.textContent=fmt(G.timer);
+ if(f){const max=G.phase==="night"?G.settings.night:G.settings.day;f.style.width=Math.max(0,Math.min(100,G.timer/max*100))+"%";}
+}
+function timerHTML(){return `<div class="timer" id="tm">${fmt(G.timer)}</div><div class="bar"><div class="fill" id="fill"></div></div>`}
+function shuffle(a){return a.sort(()=>Math.random()-.5)}
+function makeRoles(n){
+ let r=[]; const mafia=Math.max(1,Math.floor(n/4));
+ for(let i=0;i<mafia;i++)r.push("mafia");
+ if(n>=6)r.push("doctor","detective");
+ while(r.length<n)r.push("citizen");
+ return shuffle(r);
+}
+function homeUI(){
+ setStatus("الإعداد");
+ app.innerHTML=`<div class="card">
+ <div class="hero"><div class="eyebrow">THE SOCIAL DEDUCTION GAME</div><div class="title">MAFIA<br>NIGHT</div>
+ <p class="sub">كل لاعب يستلم الهاتف لوحده، يشوف دوره، ثم يضغط التالي ويسلّم الهاتف للاسم الذي يظهر له.</p></div>
+ <div class="section"><div class="row"><div class="grow"><input id="nameInput" maxlength="20" placeholder="اسم اللاعب"></div><button onclick="addPlayer()">إضافة</button></div><div id="playerList" class="players"></div></div>
+ <div class="section row"><div class="grow"><select id="nightTime"><option value="60">الليل: 60 ثانية</option><option value="90">الليل: 90 ثانية</option><option value="120">الليل: دقيقتان</option></select></div>
+ <div class="grow"><select id="dayTime"><option value="120">النهار: دقيقتان</option><option value="180">النهار: 3 دقائق</option><option value="90">النهار: 90 ثانية</option></select></div></div>
+ <div class="section"><button style="width:100%" onclick="startGame()" ${G.players.length<4?"disabled":""}>ابدأ اللعبة • ${G.players.length} لاعبين</button>
+ <div class="notice small">4–5 لاعبين: مافيا + مواطنون. 6 لاعبين فأكثر: نضيف دكتور ومحقق تلقائياً.</div></div>
+ </div>`;
+ drawPlayers();
+}
+function drawPlayers(){const el=document.getElementById("playerList");if(!el)return;el.innerHTML=G.players.map((p,i)=>`<div class="player"><span class="num">${i+1}</span><span class="pname">${esc(p)}</span><button class="x" onclick="removePlayer(${i})">×</button></div>`).join("")}
+function addPlayer(){const el=document.getElementById("nameInput"),v=el.value.trim();if(v&&G.players.length<20){G.players.push(v);homeUI();setTimeout(()=>document.getElementById("nameInput")?.focus(),0)}}
+function removePlayer(i){G.players.splice(i,1);homeUI()}
+function startGame(){
+ G.settings.night=+document.getElementById("nightTime").value;G.settings.day=+document.getElementById("dayTime").value;
+ G.roles=makeRoles(G.players.length);G.alive=G.players.map((_,i)=>i);G.roleIndex=0;G.winner=null;G.screen="roles";render();
+}
+function render(){
+ stopTimer();
+ if(G.screen==="home")homeUI();
+ else if(G.screen==="roles")roleUI();
+ else if(G.screen==="ready")readyUI();
+ else if(G.screen==="night")nightUI();
+ else if(G.screen==="day")dayUI();
+ else if(G.screen==="end")endUI();
+}
+function roleUI(){
+ const i=G.roleIndex,r=G.roles[i],info=ROLES[r];
+ app.innerHTML=`<div class="card center"><span class="phase">🔒 الدور السري • ${i+1}/${G.players.length}</span>
+ <h2>سلّم الهاتف إلى</h2><div class="big">${esc(G.players[i])}</div>
+ <div class="rolebox"><div class="icon">🎭</div><p>اضغط فقط إذا كنت <b>${esc(G.players[i])}</b></p><button onclick="revealRole()">إظهار دوري</button></div>
+ <p class="small muted">لا تخلي أي لاعب ثاني يشوف الشاشة.</p></div>`;
+ setStatus("توزيع الأدوار");
+}
+function revealRole(){
+ const i=G.roleIndex,r=G.roles[i],info=ROLES[r];
+ let extra="";
+ if(r==="mafia"){
+   const mates=G.roles.map((v,j)=>v==="mafia"?G.players[j]:null).filter(Boolean);
+   extra=`<div class="notice"><b>زملاؤك في المافيا:</b><br>${mates.map(esc).join(" • ")}</div>`;
+ }
+ app.innerHTML=`<div class="card center"><p class="muted">${esc(G.players[i])}</p>
+ <div class="rolebox"><div class="icon">${info.emoji}</div><div class="role">${info.name}</div><p>${info.desc}</p>${extra}</div>
+ <button onclick="finishRoleView()">إخفاء الدور • التالي</button></div>`;
+}
+function finishRoleView(){
+ G.roleIndex++;
+ if(G.roleIndex<G.players.length){render();return;}
+ G.screen="ready";render();
+}
+function readyUI(){
+ setStatus("جاهزون");
+ app.innerHTML=`<div class="card center"><div class="icon">🌙</div><h1>انتهى توزيع الأدوار</h1>
+ <p class="sub">الآن كل لاعب يعرف دوره. سلّموا الهاتف للمضيف أو للشخص الأول.</p>
+ <div class="notice"><b>طريقة اللعب:</b><br>كل لاعب سيأخذ الهاتف عندما يظهر اسمه، يسوي مهمته ثم يضغط «التالي» ويسلّم الهاتف للاسم التالي.</div>
+ <button style="width:100%" onclick="beginNight()">🌙 ابدأ الليل الأول</button></div>`;
+}
+function beginNight(){
+ G.night={mafiaVotes:{},saved:null,checked:null};
+ G.nightTurns=buildNightTurns();
+ G.nightPos=0;
+ G.screen="night";
+ startTimer(G.settings.night,"night");
+ showNightHandoff();
+}
+function buildNightTurns(){
+ // كل حي يظهر مرة واحدة بالترتيب؛ المواطنون ينامون، وأصحاب الأدوار ينفذون مهمتهم.
+ return G.alive.slice();
+}
+function currentNightPlayer(){return G.nightTurns[G.nightPos]}
+function nextNightPlayer(){
+ G.nightPos++;
+ if(G.nightPos<G.nightTurns.length){showNightHandoff();return;}
+ resolveNight();
+}
+function showNightHandoff(){
+ const i=currentNightPlayer();
+ if(i===undefined){resolveNight();return;}
+ setStatus("🌙 تمرير الهاتف");
+ app.innerHTML=`<div class="card center">
+   <div class="icon">📱</div>
+   <span class="phase">تمرير الهاتف</span>
+   <h2>سلّم الهاتف إلى</h2>
+   <div class="big">${esc(G.players[i])}</div>
+   <p class="muted">لا تضغط إلا عندما يصل الهاتف إلى هذا اللاعب.</p>
+   <button style="width:100%" onclick="receiveNightPhone()">استلمت الهاتف • أنا ${esc(G.players[i])}</button>
+ </div>`;
+} 
+function receiveNightPhone(){renderNightTurn();}
+function renderNightTurn(){
+ if(checkWin())return;
+ const i=currentNightPlayer(),r=G.roles[i],info=ROLES[r];
+ setStatus("🌙 الليل");
+ let body="";
+ if(r==="citizen"){
+   body=`<div class="rolebox"><div class="icon">😴</div><div class="role">مواطن</div><p>دورك الآن: <b>اسكت / نم</b> ولا تسوي أي شيء.</p>
+   <button onclick="nextNightPlayer()">التالي • سلّم الهاتف</button></div>`;
+ }else if(r==="mafia"){
+   const mafia=G.alive.filter(x=>G.roles[x]==="mafia");
+   const chosen=G.night.mafiaVotes[i];
+   body=`<div class="rolebox"><div class="icon">🔪</div><div class="role">مافيا</div>
+   <p>اختَروا ضحية واحدة. كل عضو مافيا يختار، وفي النهاية يتم اعتماد أكثر اختيار تكراراً.</p>
+   <div class="notice small">المافيا الأحياء: ${mafia.map(x=>esc(G.players[x])).join(" • ")}</div>
+   ${chosen!==undefined?`<div class="notice">اختيارك: <b>${esc(G.players[chosen])}</b></div>`:""}
+   ${buttons(G.alive.filter(x=>G.roles[x]!=="mafia"),"mafiaChoose")}
+   </div>`;
+ }else if(r==="doctor"){
+   body=`<div class="rolebox"><div class="icon">🩺</div><div class="role">دكتور</div><p>اختر لاعباً واحداً تحميه من قتل المافيا.</p>${buttons(G.alive,"doctorChoose")}</div>`;
+ }else if(r==="detective"){
+   body=`<div class="rolebox"><div class="icon">🔎</div><div class="role">محقق</div><p>اختر لاعباً واحداً للتحقيق معه.</p>${buttons(G.alive.filter(x=>x!==i),"detectiveChoose")}</div>`;
+ }
+ app.innerHTML=`<div class="card"><div class="center"><span class="phase">🌙 الليل</span>${timerHTML()}</div>
+ <div class="center"><span class="phase">📱 الهاتف عند ${esc(G.players[i])}</span></div>${body}
+ </div>`;
+ updateTimer();
+}
+function buttons(list,fn){return `<div class="grid">${list.map(i=>`<button class="choice" onclick="${fn}(${i})">${esc(G.players[i])}</button>`).join("")}</div>`}
+function mafiaChoose(target){
+ const actor=currentNightPlayer();G.night.mafiaVotes[actor]=target;
+ nextNightPlayer();
+}
+function doctorChoose(target){G.night.saved=target;nextNightPlayer()}
+function detectiveChoose(target){
+ G.night.checked={target,isMafia:G.roles[target]==="mafia"};showDetectiveResult();
+}
+function showDetectiveResult(){
+ stopTimer();
+ const c=G.night.checked;
+ app.innerHTML=`<div class="card center"><div class="icon">🔎</div><h2>نتيجة التحقيق</h2><div class="big">${esc(G.players[c.target])}</div>
+ <div class="notice">${c.isMafia?"🔪 هذا اللاعب مافيا":"👤 هذا اللاعب ليس مافيا"}</div>
+ <button onclick="nextNightPlayer()">إخفاء النتيجة • التالي</button></div>`;
+}
+function resolveNight(){
+ stopTimer();
+ const votes=Object.values(G.night.mafiaVotes);
+ let victim=null;
+ if(votes.length){
+   const count={};votes.forEach(v=>count[v]=(count[v]||0)+1);
+   victim=Object.keys(count).map(Number).sort((a,b)=>count[b]-count[a])[0];
+   const top=count[victim];
+   const tied=Object.keys(count).filter(k=>count[k]===top);
+   if(tied.length>1)victim=null;
+ }
+ if(victim!==null&&victim!==G.night.saved)G.alive=G.alive.filter(x=>x!==victim);
+ if(checkWin())return;
+ showDawn(victim);
+}
+function showDawn(victim){
+ const msg=victim===null?"لم يُقتل أحد الليلة.":`☠️ ضحية الليلة: ${esc(G.players[victim])}`;
+ app.innerHTML=`<div class="card center"><div class="icon">☀️</div><h1>طلع الصبح</h1><div class="notice">${msg}</div><button onclick="beginDay()">☀️ ابدأ النهار</button></div>`;
+}
+function beginDay(){G.screen="day";startTimer(G.settings.day,"day");renderDay()}
+function renderDay(){
+ setStatus("☀️ النهار");
+ const dead=G.players.map((p,i)=>G.alive.includes(i)?null:p).filter(Boolean);
+ app.innerHTML=`<div class="card"><div class="center"><span class="phase">☀️ النهار</span>${timerHTML()}</div>
+ <h2>ناقشوا ثم صوّتوا 🗳️</h2><p class="muted">اختاروا لاعباً واحداً لإخراجه.</p>
+ ${dead.length?`<div class="notice">💀 خرجوا: ${dead.map(esc).join(" • ")}</div>`:""}
+ <div class="grid">${G.alive.map(i=>`<button class="choice" onclick="voteOut(${i})">${esc(G.players[i])}</button>`).join("")}</div></div>`;
+ updateTimer();
+}
+function dayUI(){renderDay()}
+function voteOut(i){
+ stopTimer();G.alive=G.alive.filter(x=>x!==i);
+ if(checkWin())return;
+ app.innerHTML=`<div class="card center"><div class="icon">🗳️</div><h2>تم التصويت</h2><div class="big">${esc(G.players[i])}</div>
+ <p class="muted">تم إخراجه من اللعبة.</p><button onclick="beginNight()">🌙 ابدأ الليل التالي</button></div>`;
+}
+function autoDay(){if(G.screen==="day"&&G.alive.length)voteOut(G.alive[Math.floor(Math.random()*G.alive.length)])}
+function autoNight(){
+ // عند انتهاء الوقت، نكمل الدور الحالي بأمان.
+ const i=currentNightPlayer(),r=G.roles[i];
+ if(r==="citizen")nextNightPlayer();
+ else if(r==="mafia"){
+   const opts=G.alive.filter(x=>G.roles[x]!=="mafia");
+   if(opts.length)mafiaChoose(opts[Math.floor(Math.random()*opts.length)]);else nextNightPlayer();
+ }else if(r==="doctor"){
+   doctorChoose(G.alive[Math.floor(Math.random()*G.alive.length)]);
+ }else if(r==="detective"){
+   const opts=G.alive.filter(x=>x!==i);
+   if(opts.length){G.night.checked={target:opts[Math.floor(Math.random()*opts.length)],isMafia:false};G.night.checked.isMafia=G.roles[G.night.checked.target]==="mafia";showDetectiveResult()}else nextNightPlayer();
+ }
+}
+function checkWin(){
+ const m=G.alive.filter(i=>G.roles[i]==="mafia").length,c=G.alive.length-m;
+ if(m===0){G.winner="المواطنون";G.screen="end";render();return true}
+ if(m>=c){G.winner="المافيا";G.screen="end";render();return true}
+ return false;
+}
+function endUI(){
+ setStatus("🏆 النهاية");
+ const rows=G.players.map((p,i)=>`<div class="player"><span>${esc(p)}</span><span>${ROLES[G.roles[i]].emoji} ${ROLES[G.roles[i]].name}</span></div>`).join("");
+ app.innerHTML=`<div class="card center"><div class="icon">🏆</div><h1>انتهت اللعبة</h1><div class="winner">${G.winner}</div><div class="players">${rows}</div>
+ <div class="row"><button class="grow" onclick="newGame()">لعبة جديدة بنفس اللاعبين</button><button class="grow secondary" onclick="backHome()">تغيير اللاعبين</button></div></div>`;
+}
+function newGame(){G.roles=makeRoles(G.players.length);G.alive=G.players.map((_,i)=>i);G.roleIndex=0;G.winner=null;G.screen="roles";render()}
+function backHome(){stopTimer();G.screen="home";render()}
+render();
+</script>
+</body>
+</html>
